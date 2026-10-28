@@ -25,7 +25,7 @@ public struct ProfilesFile: Codable, Equatable, Sendable {
 }
 
 public enum ProfileError: Error, Equatable {
-    case cannotRemoveDefault, notFound
+    case cannotRemoveDefault, notFound, profileIsRunning
 }
 
 /// Persists the profile list in `<root>/profiles.json`; new profile data dirs live in `<root>/Profiles/<id>`.
@@ -38,8 +38,9 @@ public final class ProfileStore: @unchecked Sendable {
     }
 
     public func load() throws -> ProfilesFile {
-        if let data = try? Data(contentsOf: fileURL) {
-            return try JSONDecoder().decode(ProfilesFile.self, from: data)
+        if FileManager.default.fileExists(atPath: fileURL.path) {
+            // Never replace an existing file we failed to read: that would drop the user's profiles.
+            return try JSONDecoder().decode(ProfilesFile.self, from: Data(contentsOf: fileURL))
         }
         let initial = ProfilesFile(profiles: [Profile(name: "Account 1", dataDir: nil)], activeProfileId: nil)
         try save(initial)
@@ -72,11 +73,13 @@ public final class ProfileStore: @unchecked Sendable {
         }
     }
 
-    public func remove(id: UUID, deleteData: Bool) throws {
+    /// Deleting the data of the profile Claude is currently running from is refused.
+    public func remove(id: UUID, deleteData: Bool, isRunning: Bool = false) throws {
         try mutate { file in
             guard let i = file.profiles.firstIndex(where: { $0.id == id }) else { throw ProfileError.notFound }
             let profile = file.profiles[i]
             guard let dir = profile.dataDir else { throw ProfileError.cannotRemoveDefault }
+            if deleteData && isRunning { throw ProfileError.profileIsRunning }
             file.profiles.remove(at: i)
             if file.activeProfileId == id { file.activeProfileId = nil }
             if deleteData { try? FileManager.default.removeItem(atPath: dir) }

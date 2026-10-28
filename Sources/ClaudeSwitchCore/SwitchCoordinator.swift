@@ -7,14 +7,18 @@ public enum SwitchStep: Equatable, Sendable {
 }
 
 /// Quit Claude → copy sessions (nobody is writing them now) → launch the target profile.
-public final class SwitchCoordinator: Sendable {
+public final class SwitchCoordinator: @unchecked Sendable {
     static let notLoggedInMessage = "Hãy mở profile này và đăng nhập một lần trước"
+    public static let busyMessage = "Đang switch, vui lòng đợi"
+    public static let claudeMissingMessage = "Không tìm thấy Claude.app trong thư mục Applications"
     static let quitTimeout: TimeInterval = 10
 
     let claude: ClaudeControlling
     let store: ProfileStore
     let cookies: CookieSource
     let defaultDir: URL
+    private let lock = NSLock()
+    private var busy = false
 
     public init(claude: ClaudeControlling, store: ProfileStore, cookies: CookieSource, defaultDir: URL) {
         self.claude = claude
@@ -24,6 +28,8 @@ public final class SwitchCoordinator: Sendable {
     }
 
     public func switchTo(_ target: Profile, carrying sessions: [SessionInfo], force: Bool) async -> SwitchStep {
+        guard claimBusy() else { return .failed(Self.busyMessage) }
+        defer { releaseBusy() }
         if await claude.quit(timeout: Self.quitTimeout) == .stillRunning {
             guard force else { return .needsForceQuit }
             await claude.forceQuit()
@@ -43,11 +49,24 @@ public final class SwitchCoordinator: Sendable {
 
         do {
             try await claude.launch(dataDir: target.dataDir == nil ? nil : targetURL)
+        } catch LaunchError.claudeNotFound {
+            return .failed(Self.claudeMissingMessage)
         } catch {
             Log.error("Launch failed: \(error.localizedDescription)")
             return .failed("Không mở được Claude: \(error.localizedDescription)")
         }
         try? store.setActive(target.id)
         return .done(transfer: outcomes)
+    }
+
+    private func claimBusy() -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        if busy { return false }
+        busy = true
+        return true
+    }
+
+    private func releaseBusy() {
+        lock.lock(); busy = false; lock.unlock()
     }
 }

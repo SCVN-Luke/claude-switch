@@ -23,6 +23,10 @@ struct MenuView: View {
                     .contentShape(Rectangle())
                     .onTapGesture { model.selected = profile.id }
             }
+            if model.keychainDenied {
+                Text("Chưa có quyền Keychain “Claude Safe Storage” nên usage có thể cũ. Mở lại app và chọn Always Allow.")
+                    .font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+            }
             Divider()
             HStack {
                 Button("Switch") {

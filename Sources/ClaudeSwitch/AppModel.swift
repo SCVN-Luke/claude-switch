@@ -14,6 +14,7 @@ final class AppModel: ObservableObject {
     @Published var manageTab: Tab = .sessions
     @Published var transferTarget: Profile.ID?
     @Published var isSwitching = false
+    @Published var keychainDenied = false
 
     let defaultDir = Paths.claudeDefaultDataDir
     private let store = ProfileStore()
@@ -76,6 +77,7 @@ final class AppModel: ObservableObject {
             Task {
                 let state = await usageService.usage(for: dir, force: force)
                 usage[profile.id] = state
+                keychainDenied = await usageService.keychainDenied
             }
         }
     }
@@ -89,6 +91,10 @@ final class AppModel: ObservableObject {
             let p = try store.addProfile(name: trimmed)
             reloadProfiles()
             refreshUsage(force: false)
+            if confirm("Mở để đăng nhập ngay?", "Claude sẽ mở với profile “\(p.name)” để bạn đăng nhập account.",
+                       ok: "Mở ngay") {
+                requestSwitch(to: p, carrying: [])
+            }
             return p
         } catch {
             alert("Không tạo được profile", error.localizedDescription)
@@ -114,7 +120,10 @@ final class AppModel: ObservableObject {
         let r = a.runModal()
         guard r != .alertThirdButtonReturn else { return }
         do {
-            try store.remove(id: profile.id, deleteData: r == .alertSecondButtonReturn)
+            try store.remove(id: profile.id, deleteData: r == .alertSecondButtonReturn,
+                             isRunning: running?.id == profile.id)
+        } catch ProfileError.profileIsRunning {
+            alert("Không xoá được dữ liệu", "Claude đang chạy với profile này. Hãy switch sang profile khác trước.")
         } catch {
             alert("Không xoá được profile", "\(error)")
         }
@@ -124,15 +133,16 @@ final class AppModel: ObservableObject {
     // MARK: - Switch
 
     func requestSwitch(to target: Profile, carrying: [SessionInfo]) {
+        // Claimed synchronously so a double-click cannot start two switches.
         guard !isSwitching else { return }
+        isSwitching = true
         Task {
+            defer { isSwitching = false }
             if await launcher.runningDataDir() != nil {
                 let ok = confirm("Chuyển sang “\(target.name)”?",
                                  "Claude sẽ được tắt, các phiên đang chạy sẽ dừng.", ok: "Switch")
                 guard ok else { return }
             }
-            isSwitching = true
-            defer { isSwitching = false }
             var step = await coordinator.switchTo(target, carrying: carrying, force: false)
             if step == .needsForceQuit {
                 guard confirm("Claude chưa tắt. Buộc tắt?", "Claude không tự thoát sau 10 giây.", ok: "Buộc tắt")
@@ -140,6 +150,10 @@ final class AppModel: ObservableObject {
                 step = await coordinator.switchTo(target, carrying: carrying, force: true)
             }
             switch step {
+            case .failed(let message) where message == SwitchCoordinator.claudeMissingMessage:
+                if confirm("Switch thất bại", message, ok: "Mở Applications") {
+                    NSWorkspace.shared.open(URL(fileURLWithPath: "/Applications"))
+                }
             case .failed(let message):
                 alert("Switch thất bại", message)
             case .done(let transfer):

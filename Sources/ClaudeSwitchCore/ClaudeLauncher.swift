@@ -5,6 +5,10 @@ public enum QuitResult: Sendable {
     case notRunning, quit, stillRunning
 }
 
+public enum LaunchError: Error, Equatable {
+    case claudeNotFound
+}
+
 public protocol ClaudeControlling: Sendable {
     /// nil = Claude not running; .some(nil) = running on its default data dir.
     func runningDataDir() async -> URL??
@@ -66,9 +70,10 @@ public final class ClaudeLauncher: ClaudeControlling {
         dataDir.map { ["--user-data-dir=\($0.path)"] } ?? []
     }
 
-    var appURL: URL {
-        NSWorkspace.shared.urlForApplication(withBundleIdentifier: Self.bundleId)
-            ?? URL(fileURLWithPath: "/Applications/Claude.app")
+    var appURL: URL? {
+        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: Self.bundleId) { return url }
+        let fallback = URL(fileURLWithPath: "/Applications/Claude.app")
+        return FileManager.default.fileExists(atPath: fallback.path) ? fallback : nil
     }
 
     private func runningApp() -> NSRunningApplication? {
@@ -97,6 +102,7 @@ public final class ClaudeLauncher: ClaudeControlling {
     }
 
     public func launch(dataDir: URL?) async throws {
+        guard let appURL else { throw LaunchError.claudeNotFound }
         let config = NSWorkspace.OpenConfiguration()
         config.arguments = Self.launchArguments(dataDir: dataDir)
         config.createsNewApplicationInstance = true

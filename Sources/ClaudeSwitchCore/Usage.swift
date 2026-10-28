@@ -16,8 +16,20 @@ public struct UsageClient: Sendable {
         self.transport = transport
     }
 
+    /// No cookie jar and no cache: claude.ai's Set-Cookie (incl. a rotated sessionKey) must never
+    /// reach disk or leak into another profile's request.
+    public static var sessionConfiguration: URLSessionConfiguration {
+        let cfg = URLSessionConfiguration.ephemeral
+        cfg.httpCookieStorage = nil
+        cfg.httpShouldSetCookies = false
+        cfg.urlCache = nil
+        return cfg
+    }
+
+    static let session = URLSession(configuration: sessionConfiguration)
+
     public static let urlSessionTransport: HTTPTransport = { req in
-        let (data, resp) = try await URLSession.shared.data(for: req)
+        let (data, resp) = try await session.data(for: req)
         guard let http = resp as? HTTPURLResponse else { throw UsageError.badResponse }
         return (data, http)
     }
@@ -28,6 +40,7 @@ public struct UsageClient: Sendable {
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         req.setValue(Self.userAgent, forHTTPHeaderField: "User-Agent")
         req.timeoutInterval = 15
+        req.httpShouldHandleCookies = false
         let (data, resp) = try await transport(req)
         guard resp.statusCode == 200 else { throw UsageError.http(resp.statusCode) }
         return try Self.parse(data, now: Date())

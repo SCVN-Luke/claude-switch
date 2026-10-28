@@ -11,6 +11,8 @@ actor FakeClaude: ClaudeControlling {
 
     func set(quitResult: QuitResult) { self.quitResult = quitResult }
     func set(onLaunch: @escaping @Sendable () -> Void) { self.onLaunch = onLaunch }
+    var launchError: Error?
+    func set(launchError: Error) { self.launchError = launchError }
 
     func runningDataDir() async -> URL?? { running }
     func quit(timeout: TimeInterval) async -> QuitResult {
@@ -21,6 +23,7 @@ actor FakeClaude: ClaudeControlling {
     func forceQuit() async { calls.append("forceQuit"); running = nil }
     func launch(dataDir: URL?) async throws {
         onLaunch?()
+        if let launchError { throw launchError }
         calls.append("launch:\(dataDir?.path ?? "default")")
     }
 }
