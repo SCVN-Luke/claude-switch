@@ -7,6 +7,15 @@ public struct SessionInfo: Identifiable, Equatable, Hashable, Sendable {
     public var lastActivityAt: Date?
     public var isArchived: Bool
     public var fileURL: URL
+
+    public init(id: String, title: String, cwd: String, lastActivityAt: Date?, isArchived: Bool, fileURL: URL) {
+        self.id = id
+        self.title = title
+        self.cwd = cwd
+        self.lastActivityAt = lastActivityAt
+        self.isArchived = isArchived
+        self.fileURL = fileURL
+    }
 }
 
 public struct UsageSnapshot: Equatable, Sendable {

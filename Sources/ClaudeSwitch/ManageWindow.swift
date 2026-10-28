@@ -6,21 +6,26 @@ struct ManageWindow: View {
 
     var body: some View {
         TabView(selection: $model.manageTab) {
-            SessionsTab().tabItem { Text("Mang phiên") }.tag(AppModel.Tab.sessions)
-            ProfilesTab().tabItem { Text("Profile") }.tag(AppModel.Tab.profiles)
+            SessionsTab().tabItem { Text(model.t(.tabSessions)) }.tag(AppModel.Tab.sessions)
+            ProfilesTab().tabItem { Text(model.t(.tabProfiles)) }.tag(AppModel.Tab.profiles)
         }
         .padding()
-        .frame(minWidth: 620, minHeight: 420)
+        .frame(minWidth: 640, minHeight: 420)
         .disabled(model.isSwitching)
+        .environment(\.locale, Locale(identifier: model.language.rawValue))
         .onAppear { model.reloadSessions() }
     }
 }
 
 struct SessionsTab: View {
     @EnvironmentObject var model: AppModel
-    @State private var checked: Set<String> = []
+    @State private var checked: Set<String>
     @State private var search = ""
     @State private var showArchived = false
+
+    init(checked: Set<String> = []) {
+        _checked = State(initialValue: checked)
+    }
 
     private var visible: [SessionInfo] {
         model.sessions.filter { s in
@@ -34,17 +39,17 @@ struct SessionsTab: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Phiên của “\(model.sourceProfile?.name ?? "—")”").font(.headline)
+            Text(model.t(.sessionsOf, ["name": model.sourceProfile?.name ?? "—"])).font(.headline)
             HStack {
-                TextField("Tìm theo tên hoặc thư mục", text: $search).textFieldStyle(.roundedBorder)
-                Toggle("Hiện phiên đã archive", isOn: $showArchived)
+                TextField(model.t(.searchPlaceholder), text: $search).textFieldStyle(.roundedBorder)
+                Toggle(model.t(.showArchived), isOn: $showArchived)
             }
             List(visible) { s in
                 Toggle(isOn: Binding(
                     get: { checked.contains(s.id) },
                     set: { if $0 { checked.insert(s.id) } else { checked.remove(s.id) } })) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(s.title).lineLimit(1)
+                        Text(s.title.isEmpty ? model.t(.untitled) : s.title).lineLimit(1)
                         HStack {
                             Text(s.cwd).lineLimit(1).truncationMode(.middle)
                             Spacer()
@@ -55,18 +60,19 @@ struct SessionsTab: View {
                 }
             }
             HStack {
-                Picker("Sang profile", selection: $model.transferTarget) {
-                    Text("Chọn…").tag(Profile.ID?.none)
+                Picker(model.t(.toProfile), selection: $model.transferTarget) {
+                    Text(model.t(.choose)).tag(Profile.ID?.none)
                     ForEach(targets) { Text($0.name).tag(Profile.ID?.some($0.id)) }
                 }
                 .frame(maxWidth: 280)
                 Spacer()
-                Text("\(checked.count) phiên được chọn").foregroundStyle(.secondary)
-                Button("Switch & mang theo") {
+                Text(model.t(.selectedCount, ["count": "\(checked.count)"])).foregroundStyle(.secondary)
+                Button(model.t(.switchAndCarry)) {
                     guard let target = targets.first(where: { $0.id == model.transferTarget }) else { return }
                     model.requestSwitch(to: target, carrying: model.sessions.filter { checked.contains($0.id) })
                 }
                 .disabled(model.transferTarget == nil || !targets.contains { $0.id == model.transferTarget })
+                .guideTarget(.switchAndCarry)
             }
         }
     }
@@ -74,7 +80,11 @@ struct SessionsTab: View {
 
 struct ProfilesTab: View {
     @EnvironmentObject var model: AppModel
-    @State private var newName = ""
+    @State private var newName: String
+
+    init(newName: String = "") {
+        _newName = State(initialValue: newName)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -82,11 +92,13 @@ struct ProfilesTab: View {
                 ProfileEditRow(profile: profile)
             }
             HStack {
-                TextField("Tên profile mới", text: $newName).textFieldStyle(.roundedBorder)
+                TextField(model.t(.newProfileName), text: $newName).textFieldStyle(.roundedBorder)
                     .onSubmit(add)
-                Button("Thêm", action: add).disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty)
+                Button(model.t(.add), action: add)
+                    .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .guideTarget(.addProfile)
             }
-            Text("Profile mới cần đăng nhập một lần: bấm “Mở để đăng nhập”, đăng nhập account trong Claude.")
+            Text(model.t(.loginHint))
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
@@ -105,16 +117,16 @@ struct ProfileEditRow: View {
 
     var body: some View {
         HStack {
-            TextField("Tên", text: $name)
+            TextField(model.t(.newProfileName), text: $name)
                 .textFieldStyle(.plain)
                 .onSubmit { model.rename(profile, to: name) }
-            Text(profile.isDefault ? "Mặc định" : (profile.dataDir ?? ""))
+            Text(profile.isDefault ? model.t(.defaultProfile) : (profile.dataDir ?? ""))
                 .font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
             Spacer()
-            Button("Mở để đăng nhập") { model.requestSwitch(to: profile, carrying: []) }
+            Button(model.t(.openToLogin)) { model.requestSwitch(to: profile, carrying: []) }
                 .disabled(model.running?.id == profile.id)
             Button(role: .destructive) { model.remove(profile) } label: { Image(systemName: "trash") }
-                .disabled(profile.isDefault)
+                .disabled(profile.isDefault || model.running?.id == profile.id)
         }
         .onAppear { name = profile.name }
         .onChange(of: profile.name) { _, new in name = new }

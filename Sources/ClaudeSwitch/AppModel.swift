@@ -1,6 +1,7 @@
 import AppKit
 import ClaudeSwitchCore
 import Foundation
+import SwiftUI
 
 @MainActor
 final class AppModel: ObservableObject {
@@ -15,18 +16,26 @@ final class AppModel: ObservableObject {
     @Published var transferTarget: Profile.ID?
     @Published var isSwitching = false
     @Published var keychainDenied = false
+    @Published private(set) var language: AppLanguage = .en
 
+    /// Preview models feed the Guide's illustrations: sample data, no disk, network or Claude access.
+    let isPreview: Bool
     let defaultDir = Paths.claudeDefaultDataDir
     private let store = ProfileStore()
     private let launcher = ClaudeLauncher()
     private let usageService: UsageService
     private let coordinator: SwitchCoordinator
     private var timer: Timer?
+    private var activeProfileId: UUID?
+    private var guideWindow: NSWindow?
 
-    init() {
+    init(preview: Bool = false) {
+        isPreview = preview
         let cookies = CookieReader(passwords: KeychainPasswordProvider())
         usageService = UsageService(client: UsageClient(), cookies: cookies)
         coordinator = SwitchCoordinator(claude: launcher, store: store, cookies: cookies, defaultDir: defaultDir)
+        guard !preview else { return }
+
         reloadProfiles()
         let center = NSWorkspace.shared.notificationCenter
         for name in [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didTerminateApplicationNotification] {
@@ -39,39 +48,61 @@ final class AppModel: ObservableObject {
         timer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refreshUsage(force: false) }
         }
-        Task { await refreshRunning(); refreshUsage(force: false) }
+        Task {
+            await refreshRunning()
+            refreshUsage(force: false)
+            showGuideOnFirstRun()
+        }
+    }
+
+    func t(_ key: L10nKey, _ args: [String: String] = [:]) -> String {
+        L10n.t(key, language, args)
+    }
+
+    func setLanguage(_ lang: AppLanguage) {
+        language = lang
+        guideWindow?.title = t(.guideTitle)
+        guard !isPreview else { return }
+        try? store.setLanguage(lang)
     }
 
     /// The profile whose sessions can be carried over: the running one, else the last switched-to one.
     var sourceProfile: Profile? {
-        running ?? (try? store.load().activeProfileId).flatMap { id in profiles.first { $0.id == id } } ?? profiles.first
+        running ?? activeProfileId.flatMap { id in profiles.first { $0.id == id } } ?? profiles.first
     }
 
     func onMenuOpen() {
+        guard !isPreview else { return }
         Task { await refreshRunning() }
         refreshUsage(force: false)
     }
 
     func reloadProfiles() {
         do {
-            profiles = try store.load().profiles
+            let file = try store.load()
+            profiles = file.profiles
+            activeProfileId = file.activeProfileId
+            language = file.language ?? AppLanguage.preferred()
         } catch {
             Log.error("Loading profiles failed: \(error)")
-            alert("Không đọc được danh sách profile", error.localizedDescription)
+            alert(t(.loadFailed), error.localizedDescription)
         }
     }
 
     func refreshRunning() async {
+        guard !isPreview else { return }
         running = matchProfile(await launcher.runningDataDir(), in: profiles, defaultDir: defaultDir)
         reloadSessions()
     }
 
     func reloadSessions() {
+        guard !isPreview else { return }
         guard let source = sourceProfile else { sessions = []; return }
         sessions = ClaudeDataDir(url: source.resolvedDataDir(defaultDir: defaultDir)).sessions()
     }
 
     func refreshUsage(force: Bool) {
+        guard !isPreview else { return }
         for profile in profiles {
             let dir = profile.resolvedDataDir(defaultDir: defaultDir)
             Task {
@@ -82,40 +113,64 @@ final class AppModel: ObservableObject {
         }
     }
 
+    // MARK: - Guide
+
+    func showGuide() {
+        guard !isPreview else { return }
+        if guideWindow == nil {
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 980, height: 640),
+                                  styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                                  backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false
+            window.contentView = NSHostingView(rootView: GuideView().environmentObject(self))
+            window.center()
+            guideWindow = window
+        }
+        guideWindow?.title = t(.guideTitle)
+        guideWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func showGuideOnFirstRun() {
+        guard let file = try? store.load(), file.guideShown != true, file.profiles.count == 1 else { return }
+        try? store.markGuideShown()
+        showGuide()
+    }
+
     // MARK: - Profiles
 
     func addProfile(name: String) -> Profile? {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return nil }
+        guard !trimmed.isEmpty, !isPreview else { return nil }
         do {
             let p = try store.addProfile(name: trimmed)
             reloadProfiles()
             refreshUsage(force: false)
-            if confirm("Mở để đăng nhập ngay?", "Claude sẽ mở với profile “\(p.name)” để bạn đăng nhập account.",
-                       ok: "Mở ngay") {
+            if confirm(t(.openNowTitle), t(.openNowText, ["name": p.name]), ok: t(.openNowButton)) {
                 requestSwitch(to: p, carrying: [])
             }
             return p
         } catch {
-            alert("Không tạo được profile", error.localizedDescription)
+            alert(t(.createFailed), error.localizedDescription)
             return nil
         }
     }
 
     func rename(_ profile: Profile, to name: String) {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty, !isPreview else { return }
         try? store.rename(id: profile.id, to: trimmed)
         reloadProfiles()
     }
 
     func remove(_ profile: Profile) {
+        guard !isPreview else { return }
         let a = NSAlert()
-        a.messageText = "Xoá profile “\(profile.name)”?"
-        a.informativeText = "Có xoá luôn dữ liệu đăng nhập của profile này không?"
-        a.addButton(withTitle: "Chỉ xoá khỏi danh sách")
-        a.addButton(withTitle: "Xoá cả dữ liệu")
-        a.addButton(withTitle: "Huỷ")
+        a.messageText = t(.removeTitle, ["name": profile.name])
+        a.informativeText = t(.removeText)
+        a.addButton(withTitle: t(.removeListOnly))
+        a.addButton(withTitle: t(.removeWithData))
+        a.addButton(withTitle: t(.cancel))
         NSApp.activate(ignoringOtherApps: true)
         let r = a.runModal()
         guard r != .alertThirdButtonReturn else { return }
@@ -123,9 +178,9 @@ final class AppModel: ObservableObject {
             try store.remove(id: profile.id, deleteData: r == .alertSecondButtonReturn,
                              isRunning: running?.id == profile.id)
         } catch ProfileError.profileIsRunning {
-            alert("Không xoá được dữ liệu", "Claude đang chạy với profile này. Hãy switch sang profile khác trước.")
+            alert(t(.cannotDeleteTitle), t(.cannotDeleteText))
         } catch {
-            alert("Không xoá được profile", "\(error)")
+            alert(t(.removeFailed), "\(error)")
         }
         reloadProfiles()
     }
@@ -134,28 +189,29 @@ final class AppModel: ObservableObject {
 
     func requestSwitch(to target: Profile, carrying: [SessionInfo]) {
         // Claimed synchronously so a double-click cannot start two switches.
-        guard !isSwitching else { return }
+        guard !isSwitching, !isPreview else { return }
         isSwitching = true
         Task {
             defer { isSwitching = false }
             if await launcher.runningDataDir() != nil {
-                let ok = confirm("Chuyển sang “\(target.name)”?",
-                                 "Claude sẽ được tắt, các phiên đang chạy sẽ dừng.", ok: "Switch")
+                let ok = confirm(t(.confirmSwitchTitle, ["name": target.name]), t(.confirmSwitchText),
+                                 ok: t(.switchButton))
                 guard ok else { return }
             }
             var step = await coordinator.switchTo(target, carrying: carrying, force: false)
             if step == .needsForceQuit {
-                guard confirm("Claude chưa tắt. Buộc tắt?", "Claude không tự thoát sau 10 giây.", ok: "Buộc tắt")
-                else { return }
+                guard confirm(t(.forceQuitTitle), t(.forceQuitText), ok: t(.forceQuitButton)) else { return }
                 step = await coordinator.switchTo(target, carrying: carrying, force: true)
             }
             switch step {
-            case .failed(let message) where message == SwitchCoordinator.claudeMissingMessage:
-                if confirm("Switch thất bại", message, ok: "Mở Applications") {
+            case .claudeMissing:
+                if confirm(t(.switchFailed), t(.claudeMissing), ok: t(.openApplications)) {
                     NSWorkspace.shared.open(URL(fileURLWithPath: "/Applications"))
                 }
-            case .failed(let message):
-                alert("Switch thất bại", message)
+            case .launchFailed(let message):
+                alert(t(.switchFailed), t(.launchFailed, ["error": message]))
+            case .busy:
+                alert(t(.switchFailed), t(.busy))
             case .done(let transfer):
                 report(transfer, carrying: carrying)
             case .needsForceQuit:
@@ -167,16 +223,18 @@ final class AppModel: ObservableObject {
     }
 
     private func report(_ transfer: [String: TransferOutcome], carrying: [SessionInfo]) {
-        let titles = Dictionary(uniqueKeysWithValues: carrying.map { ($0.id, $0.title) })
+        let titles = Dictionary(uniqueKeysWithValues: carrying.map { ($0.id, $0.title.isEmpty ? t(.untitled) : $0.title) })
         let problems = transfer.compactMap { id, outcome -> String? in
+            let title = titles[id] ?? id
             switch outcome {
             case .copied: return nil
-            case .alreadyExists: return "• \(titles[id] ?? id): đã có"
-            case .failed(let why): return "• \(titles[id] ?? id): \(why)"
+            case .alreadyExists: return "• \(title): \(t(.alreadyThere))"
+            case .targetNotSignedIn: return "• \(title): \(t(.transferNotSignedIn))"
+            case .failed(let why): return "• \(title): \(why)"
             }
         }.sorted()
         guard !problems.isEmpty else { return }
-        alert("Một số phiên chưa được mang qua", problems.joined(separator: "\n"))
+        alert(t(.transferIssuesTitle), problems.joined(separator: "\n"))
     }
 
     // MARK: - Alerts
@@ -186,7 +244,7 @@ final class AppModel: ObservableObject {
         a.messageText = title
         a.informativeText = text
         a.addButton(withTitle: ok)
-        a.addButton(withTitle: "Huỷ")
+        a.addButton(withTitle: t(.cancel))
         NSApp.activate(ignoringOtherApps: true)
         return a.runModal() == .alertFirstButtonReturn
     }
