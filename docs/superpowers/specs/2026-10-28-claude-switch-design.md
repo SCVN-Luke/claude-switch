@@ -232,8 +232,14 @@ Log: `~/Library/Logs/ClaudeSwitch.log` (os_log + file).
   **Kết quả 2026-10-28: ĐẠT.** URLSession + Cookie `sessionKey` + UA kiểu Electron → HTTP 200,
   `five_hour` 50%, `seven_day` 39%, khớp UI Claude. Org lấy từ cookie `lastActiveOrg` đúng.
   `extra_usage.utilization` là % (26.275), `used_credits`/`monthly_limit` tính bằng cent.
+  **Kết quả 2026-10-28: ĐẠT.** Copy nguyên `local_*.json` (không sửa trường nào) sang
+  `claude-code-sessions/<acc2>/<org2>/` → phiên hiện trên sidebar profile 2, chat tiếp được với
+  đủ context (transcript dùng chung ở `~/.claude`). Claude tự cập nhật các trường runtime
+  (`lastActivityAt`, `toolSurfaceSnapshot`, `remoteControlAutoEligible`…) sau khi mở.
 - **S3 – Flag:** xác nhận `--user-data-dir` qua `NSWorkspace.openApplication` thực sự tách
   profile (không dùng chung đăng nhập với profile mặc định).
+  **Kết quả 2026-10-28: ĐẠT.** Profile 2 chạy với `--user-data-dir=…/Profiles/<id>`, đăng nhập
+  account khác (account UUID khác), profile mặc định vẫn giữ account cũ.
 
 ## 10. Kiểm thử
 
