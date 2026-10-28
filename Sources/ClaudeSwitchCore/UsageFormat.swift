@@ -12,16 +12,17 @@ public enum UsageFormat {
     }
 
     /// nil state = not fetched yet.
-    public static func line(_ state: ProfileUsageState?, timeZone: TimeZone = .current) -> String {
+    public static func line(_ state: ProfileUsageState?, language: AppLanguage,
+                            timeZone: TimeZone = .current) -> String {
         guard let state else { return "…" }
         switch state {
-        case .notLoggedIn: return "chưa đăng nhập"
+        case .notLoggedIn: return L10n.t(.notSignedIn, language)
         case .unavailable: return "—"
         case .usage(let u):
             var five = "5h \(pct(u.fiveHourPct))"
-            if let reset = u.fiveHourResetsAt { five += " (reset \(time(reset, timeZone)))" }
-            var text = "\(five) · Tuần \(pct(u.weeklyPct))"
-            if u.source == .file { text += "  ⚠︎ cũ · \(time(u.fetchedAt, timeZone))" }
+            if let reset = u.fiveHourResetsAt { five += " (\(L10n.t(.usageReset, language)) \(time(reset, timeZone)))" }
+            var text = "\(five) · \(L10n.t(.usageWeek, language)) \(pct(u.weeklyPct))"
+            if u.source == .file { text += "  ⚠︎ \(L10n.t(.usageStale, language)) · \(time(u.fetchedAt, timeZone))" }
             return text
         }
     }

@@ -1,7 +1,7 @@
 import Foundation
 
 public enum TransferOutcome: Equatable, Sendable {
-    case copied, alreadyExists, failed(String)
+    case copied, alreadyExists, targetNotSignedIn, failed(String)
 }
 
 public enum TransferError: Error, Equatable {

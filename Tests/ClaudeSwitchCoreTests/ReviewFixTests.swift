@@ -44,7 +44,7 @@ struct ReviewFixTests {
         async let first = c.switchTo(target, carrying: [], force: false)
         try await Task.sleep(nanoseconds: 50_000_000)
         let second = await c.switchTo(target, carrying: [], force: false)
-        #expect(second == .failed(SwitchCoordinator.busyMessage))
+        #expect(second == .busy)
         #expect(await first == .done(transfer: [:]))
         #expect(await claude.launches == 1)
     }
@@ -55,7 +55,7 @@ struct ReviewFixTests {
         let store = ProfileStore(root: makeTempDir())
         let target = try store.addProfile(name: "B")
         let c = SwitchCoordinator(claude: claude, store: store, cookies: FakeCookies(), defaultDir: makeTempDir())
-        #expect(await c.switchTo(target, carrying: [], force: false) == .failed(SwitchCoordinator.claudeMissingMessage))
+        #expect(await c.switchTo(target, carrying: [], force: false) == .claudeMissing)
     }
 }
 

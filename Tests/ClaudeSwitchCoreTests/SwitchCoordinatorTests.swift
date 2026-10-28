@@ -85,7 +85,7 @@ struct SwitchCoordinatorTests {
         let claude = FakeClaude()
         let target = try ProfileStore(root: storeRoot).addProfile(name: "Fresh")
         let step = await make(claude).switchTo(target, carrying: ClaudeDataDir(url: defaultDir).sessions(), force: false)
-        #expect(step == .done(transfer: ["s1": .failed("Hãy mở profile này và đăng nhập một lần trước")]))
+        #expect(step == .done(transfer: ["s1": .targetNotSignedIn]))
         #expect(await claude.calls.last == "launch:\(target.dataDir!)")
     }
 

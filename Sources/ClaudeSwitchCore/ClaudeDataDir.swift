@@ -73,7 +73,7 @@ public struct ClaudeDataDir: Sendable {
                 }
                 result.append(SessionInfo(
                     id: id,
-                    title: obj["title"] as? String ?? "(không tên)",
+                    title: obj["title"] as? String ?? "",
                     cwd: obj["cwd"] as? String ?? "",
                     lastActivityAt: (obj["lastActivityAt"] as? Double).map { Date(timeIntervalSince1970: $0 / 1000) },
                     isArchived: obj["isArchived"] as? Bool ?? false,

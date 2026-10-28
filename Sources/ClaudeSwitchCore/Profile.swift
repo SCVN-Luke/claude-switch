@@ -22,6 +22,9 @@ public struct Profile: Codable, Identifiable, Equatable, Hashable, Sendable {
 public struct ProfilesFile: Codable, Equatable, Sendable {
     public var profiles: [Profile]
     public var activeProfileId: UUID?
+    /// nil until the user picks one; the UI then follows the system language.
+    public var language: AppLanguage?
+    public var guideShown: Bool?
 }
 
 public enum ProfileError: Error, Equatable {
@@ -88,6 +91,14 @@ public final class ProfileStore: @unchecked Sendable {
 
     public func setActive(_ id: UUID?) throws {
         try mutate { $0.activeProfileId = id }
+    }
+
+    public func setLanguage(_ language: AppLanguage) throws {
+        try mutate { $0.language = language }
+    }
+
+    public func markGuideShown() throws {
+        try mutate { $0.guideShown = true }
     }
 
     private func mutate(_ body: (inout ProfilesFile) throws -> Void) throws {

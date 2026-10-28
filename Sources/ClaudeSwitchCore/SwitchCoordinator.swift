@@ -3,14 +3,13 @@ import Foundation
 public enum SwitchStep: Equatable, Sendable {
     case needsForceQuit
     case done(transfer: [String: TransferOutcome])
-    case failed(String)
+    case busy
+    case claudeMissing
+    case launchFailed(String)
 }
 
 /// Quit Claude → copy sessions (nobody is writing them now) → launch the target profile.
 public final class SwitchCoordinator: @unchecked Sendable {
-    static let notLoggedInMessage = "Hãy mở profile này và đăng nhập một lần trước"
-    public static let busyMessage = "Đang switch, vui lòng đợi"
-    public static let claudeMissingMessage = "Không tìm thấy Claude.app trong thư mục Applications"
     static let quitTimeout: TimeInterval = 10
 
     let claude: ClaudeControlling
@@ -28,7 +27,7 @@ public final class SwitchCoordinator: @unchecked Sendable {
     }
 
     public func switchTo(_ target: Profile, carrying sessions: [SessionInfo], force: Bool) async -> SwitchStep {
-        guard claimBusy() else { return .failed(Self.busyMessage) }
+        guard claimBusy() else { return .busy }
         defer { releaseBusy() }
         if await claude.quit(timeout: Self.quitTimeout) == .stillRunning {
             guard force else { return .needsForceQuit }
@@ -43,17 +42,17 @@ public final class SwitchCoordinator: @unchecked Sendable {
             do {
                 outcomes = try SessionTransfer.transfer(sessions, to: dir, targetOrg: org)
             } catch {
-                for s in sessions { outcomes[s.id] = .failed(Self.notLoggedInMessage) }
+                for s in sessions { outcomes[s.id] = .targetNotSignedIn }
             }
         }
 
         do {
             try await claude.launch(dataDir: target.dataDir == nil ? nil : targetURL)
         } catch LaunchError.claudeNotFound {
-            return .failed(Self.claudeMissingMessage)
+            return .claudeMissing
         } catch {
             Log.error("Launch failed: \(error.localizedDescription)")
-            return .failed("Không mở được Claude: \(error.localizedDescription)")
+            return .launchFailed(error.localizedDescription)
         }
         try? store.setActive(target.id)
         return .done(transfer: outcomes)
