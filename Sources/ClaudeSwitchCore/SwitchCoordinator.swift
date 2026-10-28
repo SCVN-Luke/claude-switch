@@ -2,7 +2,7 @@ import Foundation
 
 public enum SwitchStep: Equatable, Sendable {
     case needsForceQuit
-    case done(transfer: [String: TransferOutcome])
+    case done(transfer: [String: TransferOutcome], config: ConfigApplyResult? = nil)
     case busy
     case claudeMissing
     case launchFailed(String)
@@ -26,7 +26,8 @@ public final class SwitchCoordinator: @unchecked Sendable {
         self.defaultDir = defaultDir
     }
 
-    public func switchTo(_ target: Profile, carrying sessions: [SessionInfo], force: Bool) async -> SwitchStep {
+    public func switchTo(_ target: Profile, carrying sessions: [SessionInfo], config: ConfigCarry? = nil,
+                         force: Bool) async -> SwitchStep {
         guard claimBusy() else { return .busy }
         defer { releaseBusy() }
         if await claude.quit(timeout: Self.quitTimeout) == .stillRunning {
@@ -46,6 +47,8 @@ public final class SwitchCoordinator: @unchecked Sendable {
             }
         }
 
+        let configResult = config.flatMap { $0.isEmpty ? nil : $0.apply(to: targetURL) }
+
         do {
             try await claude.launch(dataDir: target.dataDir == nil ? nil : targetURL)
         } catch LaunchError.claudeNotFound {
@@ -55,7 +58,7 @@ public final class SwitchCoordinator: @unchecked Sendable {
             return .launchFailed(error.localizedDescription)
         }
         try? store.setActive(target.id)
-        return .done(transfer: outcomes)
+        return .done(transfer: outcomes, config: configResult)
     }
 
     private func claimBusy() -> Bool {
