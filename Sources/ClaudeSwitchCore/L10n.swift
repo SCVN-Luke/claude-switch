@@ -37,11 +37,16 @@ public enum L10nKey: String, CaseIterable, Sendable {
          switchFailed, claudeMissing, openApplications, busy, launchFailed, transferNotSignedIn,
          transferIssuesTitle, alreadyThere, openNowTitle, openNowText, openNowButton, removeTitle, removeText,
          removeListOnly, removeWithData, cannotDeleteTitle, cannotDeleteText, removeFailed, createFailed, loadFailed
+    // Settings tab
+    case tabConfig, fromProfile, groupCarry, toolTogglesRow, noMcpServers, groupShared, sharedRules, sharedSkills,
+         sharedCodeMcp, groupRedo, connectorsRow, openConnectors, pluginsMissing, pluginsNoneMissing, applyNow,
+         switchAndApply, applyNeedsQuit, configResultTitle, resultServersAdded, resultSkipped, resultToggles,
+         resultNothing, configFailed, errSourceUnreadable, errTargetUnreadable, errTargetNotSignedIn, takesEffectHint
     // Guide
     case guideTitle, previous, next, stepOf, keychainDialogText
     case step1Title, step1Body, step2Title, step2Body, step3Title, step3Body, step4Title, step4Body,
          step5Title, step5Body, step6Title, step6Body, step7Title, step7Body, step8Title, step8Body,
-         step9Title, step9Body
+         step9Title, step9Body, step10Title, step10Body
 }
 
 public enum L10n {
@@ -145,6 +150,59 @@ public enum L10n {
         .createFailed: e("Couldn't create the profile", "Không tạo được profile", "프로필을 만들 수 없습니다"),
         .loadFailed: e("Couldn't read the profile list", "Không đọc được danh sách profile", "프로필 목록을 읽을 수 없습니다"),
 
+        // MARK: Settings tab
+        .tabConfig: e("Settings", "Cấu hình", "설정"),
+        .fromProfile: e("From profile", "Từ profile", "원본 프로필"),
+        .groupCarry: e("Can be carried over", "Mang sang được", "가져갈 수 있음"),
+        .toolTogglesRow: e("Tool on/off settings", "Trạng thái bật/tắt tool", "도구 켜기/끄기 설정"),
+        .noMcpServers: e(
+            "This profile has no Claude Desktop MCP servers.",
+            "Profile này chưa có MCP server nào của Claude Desktop.",
+            "이 프로필에는 Claude Desktop MCP 서버가 없습니다."),
+        .groupShared: e("Already shared — nothing to carry", "Đã dùng chung — không cần mang", "이미 공유됨 — 가져갈 필요 없음"),
+        .sharedRules: e("Rules, settings and hooks (~/.claude)", "Rule, settings và hooks (~/.claude)", "규칙, 설정, 훅 (~/.claude)"),
+        .sharedSkills: e("Your skills (~/.claude/skills)", "Skill tự cài (~/.claude/skills)", "직접 설치한 스킬 (~/.claude/skills)"),
+        .sharedCodeMcp: e("Claude Code MCP servers: {names}", "MCP của Claude Code: {names}", "Claude Code MCP 서버: {names}"),
+        .groupRedo: e("Set up again in the target account", "Phải làm lại trong account đích", "대상 계정에서 다시 설정"),
+        .connectorsRow: e(
+            "Connectors (Google Drive, Slack…) belong to the account. Connect them again in Claude › Settings › Connectors.",
+            "Connectors (Google Drive, Slack…) gắn với account. Kết nối lại trong Claude › Settings › Connectors.",
+            "커넥터(Google Drive, Slack 등)는 계정에 속합니다. Claude › 설정 › 커넥터에서 다시 연결하세요."),
+        .openConnectors: e("Open Connectors", "Mở Connectors", "커넥터 열기"),
+        .pluginsMissing: e(
+            "Plugins missing in “{name}”: {list}. Install them again in Claude.",
+            "Plugin còn thiếu ở “{name}”: {list}. Cài lại trong Claude.",
+            "“{name}”에 없는 플러그인: {list}. Claude에서 다시 설치하세요."),
+        .pluginsNoneMissing: e("No plugins missing.", "Không thiếu plugin nào.", "누락된 플러그인이 없습니다."),
+        .applyNow: e("Apply", "Áp dụng", "적용"),
+        .switchAndApply: e("Switch & apply", "Switch & áp dụng", "전환 및 적용"),
+        .applyNeedsQuit: e(
+            "Claude is running on “{name}”, so its settings can't be changed now. Use “Switch & apply” instead.",
+            "Claude đang chạy với “{name}” nên chưa sửa được cấu hình. Hãy dùng “Switch & áp dụng”.",
+            "Claude가 “{name}”(으)로 실행 중이라 지금은 설정을 바꿀 수 없습니다. “전환 및 적용”을 사용하세요."),
+        .configResultTitle: e("Settings carried over", "Đã mang cấu hình sang", "설정을 가져왔습니다"),
+        .resultServersAdded: e("MCP servers added: {list}", "Đã thêm MCP: {list}", "추가된 MCP 서버: {list}"),
+        .resultSkipped: e("Already there: {list}", "Đã có sẵn: {list}", "이미 있음: {list}"),
+        .resultToggles: e("Tool settings added: {count}", "Đã thêm trạng thái tool: {count}", "추가된 도구 설정: {count}"),
+        .resultNothing: e("Nothing new to add.", "Không có gì mới để thêm.", "새로 추가할 항목이 없습니다."),
+        .configFailed: e("Couldn't carry settings: {reason}", "Không mang được cấu hình: {reason}", "설정을 가져오지 못했습니다: {reason}"),
+        .errSourceUnreadable: e(
+            "the source profile's settings can't be read",
+            "không đọc được cấu hình của profile nguồn",
+            "원본 프로필의 설정을 읽을 수 없습니다"),
+        .errTargetUnreadable: e(
+            "the target profile's settings file is damaged; nothing was changed",
+            "file cấu hình của profile đích bị hỏng; chưa thay đổi gì",
+            "대상 프로필의 설정 파일이 손상되어 아무것도 변경하지 않았습니다"),
+        .errTargetNotSignedIn: e(
+            "sign in to the target profile once first",
+            "hãy đăng nhập profile đích một lần trước",
+            "먼저 대상 프로필에 한 번 로그인하세요"),
+        .takesEffectHint: e(
+            "Changes take effect the next time Claude starts on that profile. A backup is kept as claude_desktop_config.json.bak.",
+            "Thay đổi có hiệu lực lần tới Claude mở với profile đó. Bản cũ được lưu ở claude_desktop_config.json.bak.",
+            "변경 사항은 다음에 해당 프로필로 Claude를 시작할 때 적용됩니다. 이전 파일은 claude_desktop_config.json.bak으로 보관됩니다."),
+
         // MARK: Guide
         .guideTitle: e("Claude Switch Guide", "Hướng dẫn Claude Switch", "Claude Switch 사용 가이드"),
         .previous: e("Previous", "Trước", "이전"),
@@ -200,5 +258,10 @@ public enum L10n {
             "Conversation history lives in ~/.claude and is shared by every profile, so switching back and forth never loses messages and you never need to carry a session back. The original stays in the old profile's sidebar; archive it if it gets confusing.",
             "Lịch sử hội thoại nằm ở ~/.claude và dùng chung cho mọi profile, nên chuyển qua lại không mất tin nhắn và không cần mang phiên ngược lại. Bản gốc vẫn còn trên sidebar profile cũ; có thể archive nếu thấy rối.",
             "대화 기록은 ~/.claude에 저장되며 모든 프로필이 공유합니다. 따라서 여러 번 전환해도 메시지가 사라지지 않고, 세션을 다시 가져올 필요도 없습니다. 원본 세션은 이전 프로필의 사이드바에 남아 있으니 헷갈리면 보관하세요."),
+        .step10Title: e("Carry MCP servers and settings", "Mang MCP và cấu hình", "MCP 서버와 설정 가져가기"),
+        .step10Body: e(
+            "In Manage profiles › Settings, pick the source and target profiles, tick the MCP servers and tool settings to carry, then click Apply (or “Switch & apply” if Claude is running on the target). Rules, skills and Claude Code MCP are already shared; connectors and plugins must be set up again in the other account.",
+            "Trong Quản lý profile › Cấu hình, chọn profile nguồn và đích, tick các MCP server và trạng thái tool cần mang, rồi bấm Áp dụng (hoặc “Switch & áp dụng” nếu Claude đang chạy profile đích). Rule, skill và MCP của Claude Code đã dùng chung sẵn; connectors và plugin phải làm lại trong account kia.",
+            "프로필 관리 › 설정에서 원본과 대상 프로필을 고르고, 가져갈 MCP 서버와 도구 설정을 체크한 뒤 적용을 클릭하세요(대상 프로필로 Claude가 실행 중이면 “전환 및 적용”). 규칙, 스킬, Claude Code MCP는 이미 공유되며, 커넥터와 플러그인은 다른 계정에서 다시 설정해야 합니다."),
     ]
 }

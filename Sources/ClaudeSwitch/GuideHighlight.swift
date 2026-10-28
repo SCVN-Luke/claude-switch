@@ -3,7 +3,7 @@ import SwiftUI
 /// Controls the Guide can point at. Real views tag themselves with `.guideTarget(_:)`;
 /// outside the Guide the tag has no visible effect.
 enum GuideTarget: Hashable {
-    case menuBarIcon, manageProfiles, addProfile, alertPrimary, switchButton, profileRow2, switchAndCarry
+    case menuBarIcon, manageProfiles, addProfile, alertPrimary, switchButton, profileRow2, switchAndCarry, applyConfig
 }
 
 struct GuideAnchorKey: PreferenceKey {

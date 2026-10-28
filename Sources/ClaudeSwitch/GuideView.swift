@@ -2,7 +2,9 @@ import ClaudeSwitchCore
 import SwiftUI
 
 struct GuideStep: Identifiable {
-    enum Illustration { case menuBar, manageProfiles, addProfile, openNow, signIn, keychain, switchProfile, carry, chatsSafe }
+    enum Illustration {
+        case menuBar, manageProfiles, addProfile, openNow, signIn, keychain, switchProfile, carry, carryConfig, chatsSafe
+    }
 
     let id: Int
     let title: L10nKey
@@ -18,7 +20,8 @@ struct GuideStep: Identifiable {
         GuideStep(id: 6, title: .step6Title, body: .step6Body, illustration: .keychain),
         GuideStep(id: 7, title: .step7Title, body: .step7Body, illustration: .switchProfile),
         GuideStep(id: 8, title: .step8Title, body: .step8Body, illustration: .carry),
-        GuideStep(id: 9, title: .step9Title, body: .step9Body, illustration: .chatsSafe),
+        GuideStep(id: 9, title: .step10Title, body: .step10Body, illustration: .carryConfig),
+        GuideStep(id: 10, title: .step9Title, body: .step9Body, illustration: .chatsSafe),
     ]
 }
 
@@ -131,6 +134,11 @@ struct GuideIllustration: View {
                 .environmentObject(SampleData.model(profiles: 2, language: language))
                 .frame(width: 560, height: 300).padding(14).panel()
                 .guideHighlight([.switchAndCarry])
+        case .carryConfig:
+            ConfigTab(checked: ["rea", "unityMCP"], toolToggles: true)
+                .environmentObject(SampleData.model(profiles: 2, language: language))
+                .frame(width: 560).padding(14).panel()
+                .guideHighlight([.applyConfig])
         case .chatsSafe:
             IconCard(symbol: "bubble.left.and.bubble.right.fill", caption: "~/.claude/projects")
         }
@@ -223,6 +231,13 @@ enum SampleData {
         m.running = account1
         m.selected = count == 1 ? nil : account2.id
         m.transferTarget = account2.id
+        m.configSource = account1.id
+        m.configTarget = account2.id
+        m.previewServers = [account1.id: [MCPServerEntry(name: "Code Maestro", detail: "node"),
+                                          MCPServerEntry(name: "rea", detail: "rea"),
+                                          MCPServerEntry(name: "unityMCP", detail: "uvx")]]
+        m.previewPlugins = [account1.id: ["anthropic-skills", "superpowers"], account2.id: ["anthropic-skills"]]
+        m.previewCodeMCP = ["codebase-memory-mcp", "unity-mcp"]
         let now = Date()
         m.usage[account1.id] = .usage(UsageSnapshot(fiveHourPct: 48, fiveHourResetsAt: now.addingTimeInterval(2 * 3600),
                                                     weeklyPct: 33, fetchedAt: now, source: .live))

@@ -5,7 +5,7 @@ import SwiftUI
 
 @MainActor
 final class AppModel: ObservableObject {
-    enum Tab: Hashable { case sessions, profiles }
+    enum Tab: Hashable { case sessions, profiles, config }
 
     @Published var profiles: [Profile] = []
     @Published var running: Profile?
@@ -17,6 +17,12 @@ final class AppModel: ObservableObject {
     @Published var isSwitching = false
     @Published var keychainDenied = false
     @Published private(set) var language: AppLanguage = .en
+    @Published var configSource: Profile.ID?
+    @Published var configTarget: Profile.ID?
+    /// Guide illustrations only: stands in for what would be read from disk.
+    var previewServers: [Profile.ID: [MCPServerEntry]] = [:]
+    var previewPlugins: [Profile.ID: [String]] = [:]
+    var previewCodeMCP: [String] = []
 
     /// Preview models feed the Guide's illustrations: sample data, no disk, network or Claude access.
     let isPreview: Bool
@@ -113,6 +119,58 @@ final class AppModel: ObservableObject {
         }
     }
 
+    // MARK: - Settings carry
+
+    func mcpServers(of profile: Profile) -> [MCPServerEntry] {
+        isPreview ? previewServers[profile.id] ?? []
+            : DesktopConfig.mcpServers(in: profile.resolvedDataDir(defaultDir: defaultDir))
+    }
+
+    func plugins(of profile: Profile) -> [String] {
+        isPreview ? previewPlugins[profile.id] ?? []
+            : DesktopConfig.installedPlugins(in: profile.resolvedDataDir(defaultDir: defaultDir))
+    }
+
+    var codeMCPServers: [String] { isPreview ? previewCodeMCP : DesktopConfig.claudeCodeMCPServers() }
+
+    func configCarry(from source: Profile, servers: [String], toolToggles: Bool) -> ConfigCarry {
+        ConfigCarry(source: source.resolvedDataDir(defaultDir: defaultDir), mcpServers: servers, toolToggles: toolToggles)
+    }
+
+    /// Writes into a profile Claude is not running on; otherwise asks for "Switch & apply".
+    func applyConfig(_ carry: ConfigCarry, to target: Profile) {
+        guard !isPreview else { return }
+        Task {
+            await refreshRunning()
+            if running?.id == target.id {
+                alert(t(.configResultTitle), t(.applyNeedsQuit, ["name": target.name]))
+                return
+            }
+            reportConfig(carry.apply(to: target.resolvedDataDir(defaultDir: defaultDir)))
+        }
+    }
+
+    private func reportConfig(_ r: ConfigApplyResult) {
+        if let failure = r.failure {
+            let reason: L10nKey = switch failure {
+            case .sourceUnreadable: .errSourceUnreadable
+            case .targetUnreadable: .errTargetUnreadable
+            case .targetNotSignedIn: .errTargetNotSignedIn
+            }
+            alert(t(.configResultTitle), t(.configFailed, ["reason": t(reason)]))
+            return
+        }
+        let added = r.servers.filter { $0.value == .copied }.keys.sorted()
+        let skipped = r.servers.filter { $0.value == .alreadyExists }.keys.sorted()
+        var lines: [String] = []
+        if !added.isEmpty { lines.append(t(.resultServersAdded, ["list": added.joined(separator: ", ")])) }
+        if !skipped.isEmpty { lines.append(t(.resultSkipped, ["list": skipped.joined(separator: ", ")])) }
+        if let n = r.togglesAdded, n > 0 { lines.append(t(.resultToggles, ["count": "\(n)"])) }
+        if lines.isEmpty { lines.append(t(.resultNothing)) }
+        lines.append(t(.takesEffectHint))
+        alert(t(.configResultTitle), lines.joined(separator: "\n"))
+    }
+
     // MARK: - Guide
 
     func showGuide() {
@@ -187,7 +245,7 @@ final class AppModel: ObservableObject {
 
     // MARK: - Switch
 
-    func requestSwitch(to target: Profile, carrying: [SessionInfo]) {
+    func requestSwitch(to target: Profile, carrying: [SessionInfo], config: ConfigCarry? = nil) {
         // Claimed synchronously so a double-click cannot start two switches.
         guard !isSwitching, !isPreview else { return }
         isSwitching = true
@@ -198,10 +256,10 @@ final class AppModel: ObservableObject {
                                  ok: t(.switchButton))
                 guard ok else { return }
             }
-            var step = await coordinator.switchTo(target, carrying: carrying, force: false)
+            var step = await coordinator.switchTo(target, carrying: carrying, config: config, force: false)
             if step == .needsForceQuit {
                 guard confirm(t(.forceQuitTitle), t(.forceQuitText), ok: t(.forceQuitButton)) else { return }
-                step = await coordinator.switchTo(target, carrying: carrying, force: true)
+                step = await coordinator.switchTo(target, carrying: carrying, config: config, force: true)
             }
             switch step {
             case .claudeMissing:
@@ -212,8 +270,9 @@ final class AppModel: ObservableObject {
                 alert(t(.switchFailed), t(.launchFailed, ["error": message]))
             case .busy:
                 alert(t(.switchFailed), t(.busy))
-            case .done(let transfer):
+            case .done(let transfer, let configResult):
                 report(transfer, carrying: carrying)
+                if let configResult { reportConfig(configResult) }
             case .needsForceQuit:
                 break
             }

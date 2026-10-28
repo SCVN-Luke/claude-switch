@@ -8,6 +8,7 @@ struct ManageWindow: View {
         TabView(selection: $model.manageTab) {
             SessionsTab().tabItem { Text(model.t(.tabSessions)) }.tag(AppModel.Tab.sessions)
             ProfilesTab().tabItem { Text(model.t(.tabProfiles)) }.tag(AppModel.Tab.profiles)
+            ConfigTab().tabItem { Text(model.t(.tabConfig)) }.tag(AppModel.Tab.config)
         }
         .padding()
         .frame(minWidth: 640, minHeight: 420)
@@ -130,5 +131,127 @@ struct ProfileEditRow: View {
         }
         .onAppear { name = profile.name }
         .onChange(of: profile.name) { _, new in name = new }
+    }
+}
+
+/// Carries per-profile Claude Desktop settings (local MCP servers, tool toggles) to another profile,
+/// and explains what is already shared or must be redone in the other account.
+struct ConfigTab: View {
+    @EnvironmentObject var model: AppModel
+    @State private var checked: Set<String>
+    @State private var toolToggles: Bool
+
+    init(checked: Set<String> = [], toolToggles: Bool = false) {
+        _checked = State(initialValue: checked)
+        _toolToggles = State(initialValue: toolToggles)
+    }
+
+    private var source: Profile? {
+        model.profiles.first { $0.id == model.configSource } ?? model.sourceProfile
+    }
+
+    private var target: Profile? {
+        model.profiles.first { $0.id == model.configTarget && $0.id != source?.id }
+            ?? model.profiles.first { $0.id != source?.id }
+    }
+
+    private var targetServerNames: Set<String> {
+        Set(target.map { model.mcpServers(of: $0).map(\.name) } ?? [])
+    }
+
+    private var carry: ConfigCarry? {
+        guard let source else { return nil }
+        let names = checked.subtracting(targetServerNames).sorted()
+        let c = model.configCarry(from: source, servers: names, toolToggles: toolToggles)
+        return c.isEmpty ? nil : c
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Picker(model.t(.fromProfile), selection: Binding(
+                    get: { source?.id }, set: { model.configSource = $0; checked = [] })) {
+                    ForEach(model.profiles) { Text($0.name).tag(Profile.ID?.some($0.id)) }
+                }
+                Image(systemName: "arrow.right")
+                Picker(model.t(.toProfile), selection: Binding(get: { target?.id }, set: { model.configTarget = $0 })) {
+                    ForEach(model.profiles.filter { $0.id != source?.id }) { Text($0.name).tag(Profile.ID?.some($0.id)) }
+                }
+            }
+
+            GroupBox(model.t(.groupCarry)) {
+                VStack(alignment: .leading, spacing: 6) {
+                    let servers = source.map { model.mcpServers(of: $0) } ?? []
+                    if servers.isEmpty {
+                        Text(model.t(.noMcpServers)).foregroundStyle(.secondary)
+                    }
+                    ForEach(servers) { server in
+                        let present = targetServerNames.contains(server.name)
+                        Toggle(isOn: Binding(
+                            get: { present || checked.contains(server.name) },
+                            set: { if $0 { checked.insert(server.name) } else { checked.remove(server.name) } })) {
+                            HStack {
+                                Text(server.name)
+                                Text(server.detail).font(.caption).foregroundStyle(.secondary)
+                                if present { Text(model.t(.alreadyThere)).font(.caption).foregroundStyle(.green) }
+                            }
+                        }
+                        .disabled(present)
+                    }
+                    Divider()
+                    Toggle(model.t(.toolTogglesRow), isOn: $toolToggles)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(4)
+            }
+
+            GroupBox(model.t(.groupShared)) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Label(model.t(.sharedRules), systemImage: "checkmark.circle.fill")
+                    Label(model.t(.sharedSkills), systemImage: "checkmark.circle.fill")
+                    Label(model.t(.sharedCodeMcp, ["names": model.codeMCPServers.joined(separator: ", ")]),
+                          systemImage: "checkmark.circle.fill")
+                }
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(4)
+            }
+
+            GroupBox(model.t(.groupRedo)) {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .top) {
+                        Text(model.t(.connectorsRow)).fixedSize(horizontal: false, vertical: true)
+                        Spacer()
+                        Button(model.t(.openConnectors)) {
+                            NSWorkspace.shared.open(URL(string: "https://claude.ai/settings/connectors")!)
+                        }
+                    }
+                    Text(missingPluginsText).fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(4)
+            }
+
+            Text(model.t(.takesEffectHint)).font(.caption).foregroundStyle(.secondary)
+            HStack {
+                Spacer()
+                Button(model.t(.applyNow)) {
+                    if let carry, let target { model.applyConfig(carry, to: target) }
+                }
+                .disabled(carry == nil || target == nil)
+                Button(model.t(.switchAndApply)) {
+                    if let carry, let target { model.requestSwitch(to: target, carrying: [], config: carry) }
+                }
+                .disabled(carry == nil || target == nil || target?.id == model.running?.id)
+                .guideTarget(.applyConfig)
+            }
+        }
+    }
+
+    private var missingPluginsText: String {
+        guard let source, let target else { return "" }
+        let missing = Set(model.plugins(of: source)).subtracting(model.plugins(of: target)).sorted()
+        return missing.isEmpty ? model.t(.pluginsNoneMissing)
+            : model.t(.pluginsMissing, ["name": target.name, "list": missing.joined(separator: ", ")])
     }
 }

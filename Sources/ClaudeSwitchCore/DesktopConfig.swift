@@ -5,6 +5,11 @@ public struct MCPServerEntry: Identifiable, Equatable, Hashable, Sendable {
     public var name: String
     /// Executable name or URL host — never args or env, which may hold secrets.
     public var detail: String
+
+    public init(name: String, detail: String) {
+        self.name = name
+        self.detail = detail
+    }
 }
 
 public enum ConfigCopyOutcome: Equatable, Sendable {
@@ -114,6 +119,13 @@ public enum DesktopConfig {
             if let name = (try? readObject(url))?["name"] as? String { names.insert(name) }
         }
         return names.sorted()
+    }
+
+    /// MCP servers Claude Code reads from `~/.claude.json`; shared by every profile.
+    public static func claudeCodeMCPServers(
+        file: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude.json")
+    ) -> [String] {
+        ((try? readObject(file))?["mcpServers"] as? [String: Any] ?? [:]).keys.sorted()
     }
 
     private static func readObject(_ url: URL) throws -> [String: Any]? {

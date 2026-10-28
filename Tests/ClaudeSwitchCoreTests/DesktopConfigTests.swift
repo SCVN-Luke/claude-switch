@@ -100,4 +100,11 @@ struct DesktopConfigTests {
         #expect(DesktopConfig.installedPlugins(in: dir) == ["anthropic-skills", "superpowers"])
         #expect(DesktopConfig.installedPlugins(in: makeTempDir()).isEmpty)
     }
+
+    @Test func readsSharedClaudeCodeServers() throws {
+        let file = makeTempDir().appendingPathComponent(".claude.json")
+        FakeDataDir.writeJSON(["mcpServers": ["unity-mcp": ["command": "x"], "rea": ["command": "y"]], "other": 1], to: file)
+        #expect(DesktopConfig.claudeCodeMCPServers(file: file) == ["rea", "unity-mcp"])
+        #expect(DesktopConfig.claudeCodeMCPServers(file: makeTempDir().appendingPathComponent("none")).isEmpty)
+    }
 }
